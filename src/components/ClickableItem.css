@@ -1,0 +1,19 @@
+.clickable-item{
+    position: absolute;
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    padding:0;
+    margin: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.background-video{
+    pointer-events: none;
+}
+.clickable-item:focus,
+.clickable-item:active,
+.clickable-item:hover{
+    box-shadow: none;
+}
