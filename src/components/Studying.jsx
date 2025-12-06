@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import clickSound from '../assets/click.mp3';
-import './studying.css';
+import './Studying.css';
 import table from '../assets/table.png';
 import stickynote1 from '../assets/stickynote1.png';
 import stickynote2 from '../assets/stickynote2.png';
