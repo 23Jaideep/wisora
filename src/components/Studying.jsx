@@ -1,27 +1,24 @@
-import React, { useState, useRef, useEffect } from "react";
-import clickSound from "../assets/click.mp3";
-import "./Studying.css";
-
-import table from "../assets/table.png";
-import stickynote1 from "../assets/stickynote1.png";
-import stickynote2 from "../assets/stickynote2.png";
-import stickynote3 from "../assets/stickynote3.png";
-import stickynote4 from "../assets/stickynote4.png";
-import yellowstickynote from "../assets/yellowstickynote.png";
-import bluestickynote from "../assets/bluestickynote.png";
-import pinkstickynote from "../assets/pinkstickynote.png";
-import greenstickynote from "../assets/greenstickynote.png";
-import digitalClock from "../assets/digitalClock.png";
-
-import { useCoins } from "../context/coinContext";
-
-/* ================= CONFIG ================= */
-
+import React, { useState, useRef, useEffect } from 'react';
+import clickSound from '../assets/click.mp3';
+import './Studying.css';
+import table from '../assets/table.png';
+import stickynote1 from '../assets/stickynote1.png';
+import stickynote2 from '../assets/stickynote2.png';
+import stickynote3 from '../assets/stickynote3.png';
+import stickynote4 from '../assets/stickynote4.png';
+import yellowstickynote from '../assets/yellowstickynote.png';
+import bluestickynote from '../assets/bluestickynote.png';
+import pinkstickynote from '../assets/pinkstickynote.png';
+import greenstickynote from '../assets/greenstickynote.png';
+import digitalClock from '../assets/digitalClock.png';
+import { useCoins } from '../context/coinContext';
+// --- Configuration for Text/Drawing area relative to the 100% note size ---
 const CONTENT_AREA = {
   EDITOR_LEFT_PERCENT: 15,
   EDITOR_TOP_PERCENT: 15,
   EDITOR_WIDTH_PERCENT: 70,
   EDITOR_HEIGHT_PERCENT: 70,
+
   PREVIEW_SIZE: 120,
   PREVIEW_LEFT_OFFSET: 18,
   PREVIEW_TOP_OFFSET: 18,
@@ -37,131 +34,61 @@ const TRASH_BIN_DIMENSIONS = {
 };
 
 const COIN_INTERVAL = 60;
-
-const noteMap = {
-  stickynote1,
-  stickynote2,
-  stickynote3,
-  stickynote4,
-  yellowstickynote,
-  bluestickynote,
-  pinkstickynote,
-  greenstickynote,
-};
-
-/* ================= MAIN COMPONENT ================= */
+// =======================================================================
+// === 1. Studying Component (Main App) ===
+// =======================================================================
 
 const Studying = () => {
-  const { coins, setCoins } = useCoins();
-
-  /* -------- COIN / STUDY TIME -------- */
-
+  const {coins, setCoins} = useCoins();
   const [totalStudySeconds, setTotalStudySeconds] = useState(() => {
-    return Number(localStorage.getItem("wisora_totalStudySeconds")) || 0;
-  });
-
-  const [rewardedSeconds, setRewardedSeconds] = useState(() => {
-    return Number(localStorage.getItem("wisora_rewardedSeconds")) || 0;
-  });
-
-  /* -------- TIMER SYSTEM (SINGLE SOURCE OF TRUTH) -------- */
-
-  const [seconds, setSeconds] = useState(0);
-  const [countdownSeconds, setCountdownSeconds] = useState(0);
-
-  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
-  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
-
-  const [lastInteracted, setLastInteracted] = useState("stopwatch");
-
+  const saved = localStorage.getItem("wisora_totalStudySeconds");
+  return saved ? Number(saved) : 0;
+});
+  const [rewardedSeconds, setRewardedSeconds] = useState(()=>{
+    const saved = localStorage.getItem("wisora_rewardedSeconds");
+    return saved? Number(saved): 0;
+  })
   const [isEditingCountdown, setIsEditingCountdown] = useState(false);
-  const [countdownInput, setCountdownInput] = useState("00:00:00");
   const countdownInputRef = useRef(null);
-
-  /* -------- STICKY NOTES -------- */
-
-  const [stickyNotes, setStickyNotes] = useState(() => {
+  const [countdownInput, setCountdownInput] = useState("00:00:00");
+  const [isRunning, setIsRunning] = useState(false);
+  const [countdownMode, setCountdownMode] = useState(false);
+  const [countdownSeconds, setCountdownSeconds] = useState(0);
+  const [draggedNote, setDraggedNote] = useState(null);
+  const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [selectedNoteIndex, setSelectedNoteIndex] = useState(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
+  const [isOverTrashBin, setIsOverTrashBin] = useState(false);
+  const studyingRef = useRef(null);
+  const audioRef = useRef(new Audio(clickSound));
+  const [stickyNotes, setStickyNotes] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("stickyNotes")) || [];
+      const saved = localStorage.getItem("stickyNotes");
+      return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
-
-  const [draggedNote, setDraggedNote] = useState(null);
-  const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
-  const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  const [selectedNoteIndex, setSelectedNoteIndex] = useState(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isOverTrashBin, setIsOverTrashBin] = useState(false);
-
-  /* -------- REFS -------- */
-
-  const studyingRef = useRef(null);
-  const audioRef = useRef(new Audio(clickSound));
-
-  /* ================= EFFECTS ================= */
-
-  useEffect(() => {
-    localStorage.setItem("stickyNotes", JSON.stringify(stickyNotes));
-  }, [stickyNotes]);
-
-  useEffect(() => {
+  useEffect(()=>{
+    localStorage.setItem("wisora_coins", coins);
     localStorage.setItem("wisora_totalStudySeconds", totalStudySeconds);
     localStorage.setItem("wisora_rewardedSeconds", rewardedSeconds);
-    localStorage.setItem("wisora_coins", coins);
-  }, [totalStudySeconds, rewardedSeconds, coins]);
-
-  /* Stopwatch loop */
-  useEffect(() => {
-    if (!isRunningStopwatch) return;
-    const id = setInterval(() => {
-      setSeconds((s) => s + 1);
-      setTotalStudySeconds((t) => t + 1);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isRunningStopwatch]);
-
-  /* Countdown loop */
-  useEffect(() => {
-    if (!isRunningCountdown) return;
-    const id = setInterval(() => {
-      setCountdownSeconds((p) => {
-        if (p <= 1) {
-          setIsRunningCountdown(false);
-          return 0;
-        }
-        setTotalStudySeconds((t) => t + 1);
-        return p - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isRunningCountdown]);
-
-  /* Coin reward */
-  useEffect(() => {
-    if (totalStudySeconds - rewardedSeconds >= COIN_INTERVAL) {
-      setCoins((c) => c + 1);
-      setRewardedSeconds((r) => r + COIN_INTERVAL);
+  }, [coins, totalStudySeconds, rewardedSeconds]);
+  useEffect(()=>{
+    if(!isRunning) return;
+    setTotalStudySeconds(prev=>prev+1);
+  }, [seconds, countdownSeconds]);
+  useEffect(()=>{
+    if(totalStudySeconds-rewardedSeconds>=COIN_INTERVAL){
+      setCoins(prev=>prev+1);
+      setRewardedSeconds(prev=>prev+COIN_INTERVAL);
     }
   }, [totalStudySeconds]);
-
-  useEffect(() => {
-    if (isEditingCountdown && countdownInputRef.current) {
-      countdownInputRef.current.focus();
-    }
-  }, [isEditingCountdown]);
-
-  /* ================= HELPERS ================= */
-
-  const formatTime = (t) => {
-    const h = Math.floor(t / 3600);
-    const m = Math.floor((t % 3600) / 60);
-    const s = t % 60;
-    return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
-  };
+useEffect(() => {
+    localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes));
+  }, [stickyNotes]);
 
   const getTrashRect = () => ({
     x: TRASH_BIN_DIMENSIONS.left,
@@ -172,44 +99,6 @@ const Studying = () => {
     width: TRASH_BIN_DIMENSIONS.width,
     height: TRASH_BIN_DIMENSIONS.height,
   });
-
-  /* ================= TIMER CONTROLS ================= */
-
-  const handleStart = () => {
-    setLastInteracted("stopwatch");
-    setIsRunningStopwatch(true);
-  };
-
-  const handleSetCountdown = () => {
-    setLastInteracted("countdown");
-    setIsEditingCountdown(true);
-    setCountdownInput(formatTime(countdownSeconds));
-  };
-
-  const handlePause = () => {
-    if (lastInteracted === "stopwatch") {
-      setIsRunningStopwatch((p) => !p);
-    } else {
-      setIsRunningCountdown((p) => !p);
-    }
-  };
-
-  const handleStop = () => {
-    setIsRunningStopwatch(false);
-    setIsRunningCountdown(false);
-    setSeconds(0);
-    setCountdownSeconds(0);
-    setIsEditingCountdown(false);
-  };
-
-  const primaryDisplay = () => {
-    if (isEditingCountdown) return countdownInput;
-    return lastInteracted === "stopwatch"
-      ? formatTime(seconds)
-      : formatTime(countdownSeconds);
-  };
-
-  /* ================= DRAG LOGIC ================= */
 
   const handleMouseDown = (noteKey, e, index = null) => {
     e.preventDefault();
@@ -227,6 +116,7 @@ const Studying = () => {
       setDraggedNoteIndex(null);
       setIsDraggingExistingNote(false);
     }
+
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 
@@ -235,13 +125,13 @@ const Studying = () => {
     setMousePos({ x: e.clientX, y: e.clientY });
 
     if (isDraggingExistingNote) {
-      const r = getTrashRect();
-      setIsOverTrashBin(
-        e.clientX > r.x &&
-          e.clientX < r.x + r.width &&
-          e.clientY > r.y &&
-          e.clientY < r.y + r.height
-      );
+      const trashRect = getTrashRect();
+      const isOver =
+        e.clientX > trashRect.x &&
+        e.clientX < trashRect.x + trashRect.width &&
+        e.clientY > trashRect.y &&
+        e.clientY < trashRect.y + trashRect.height;
+      setIsOverTrashBin(isOver);
     }
   };
 
@@ -252,21 +142,26 @@ const Studying = () => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const r = getTrashRect();
-    const droppedOverTrash =
-      e.clientX > r.x &&
-      e.clientX < r.x + r.width &&
-      e.clientY > r.y &&
-      e.clientY < r.y + r.height;
+    const trashRect = getTrashRect();
+    const isDroppedOverTrash =
+      e.clientX > trashRect.x &&
+      e.clientX < trashRect.x + trashRect.width &&
+      e.clientY > trashRect.y &&
+      e.clientY < trashRect.y + trashRect.height;
 
-    if (isDraggingExistingNote && droppedOverTrash) {
-      setStickyNotes((p) => p.filter((_, i) => i !== draggedNoteIndex));
+    if (isDraggingExistingNote && isDroppedOverTrash) {
+      setStickyNotes((prev) => prev.filter((_, i) => i !== draggedNoteIndex));
     } else if (isDraggingExistingNote) {
-      setStickyNotes((p) =>
-        p.map((n, i) => (i === draggedNoteIndex ? { ...n, x, y } : n))
+      setStickyNotes((prev) =>
+        prev.map((note, i) =>
+          i === draggedNoteIndex ? { ...note, x, y } : note
+        )
       );
     } else {
-      setStickyNotes((p) => [...p, { src: draggedNote, x, y, text: "", drawings: [] }]);
+      setStickyNotes((prev) => [
+        ...prev,
+        { src: draggedNote, x, y, text: "", drawings: [] },
+      ]);
     }
 
     setDraggedNote(null);
@@ -275,42 +170,397 @@ const Studying = () => {
     setIsOverTrashBin(false);
   };
 
-  /* ================= RENDER ================= */
+  const handleNoteClick = (index, e) => {
+    e.stopPropagation();
+    if (!draggedNote) {
+      setSelectedNoteIndex(index);
+      setIsEditorOpen(true);
+    }
+  };
+
+  const handleSaveNote = (text, drawings) => {
+    setStickyNotes((prev) =>
+      prev.map((note, i) =>
+        i === selectedNoteIndex ? { ...note, text, drawings } : note
+      )
+    );
+    setIsEditorOpen(false);
+    setSelectedNoteIndex(null);
+  };
+
+  /* -------------------- TIMER SYSTEM -------------------- */
+
+  // TRUE DUAL TIMER MODE ✔
+  const [seconds, setSeconds] = useState(0);
+  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
+  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
+
+  // inline countdown editor
+  // const [countdownInput, setCountdownInput] = useState("00:00:00");
+
+  // LCD display selection
+  const [lastInteracted, setLastInteracted] = useState("stopwatch");
+
+  /* STOPWATCH LOOP */
+  useEffect(() => {
+    let id;
+    if (isRunningStopwatch) {
+      id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    }
+    return () => clearInterval(id);
+  }, [isRunningStopwatch]);
+
+  /* COUNTDOWN LOOP */
+  useEffect(() => {
+    let id;
+    if (isRunningCountdown) {
+      id = setInterval(() => {
+        setCountdownSeconds((prev) => {
+          if (prev <= 1) {
+            setIsRunningCountdown(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(id);
+  }, [isRunningCountdown]);
+
+  useEffect(() => {
+    if (isEditingCountdown && countdownInputRef.current) {
+      countdownInputRef.current.focus();
+      countdownInputRef.current.setSelectionRange(0, 1);
+    }
+  }, [isEditingCountdown]);
+
+  const formatTime = (t) => {
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = t % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  };
+
+  const parseTime = (str) => {
+    const parts = str.split(":").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    if (parts[1] > 59 || parts[2] > 59) return null;
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  };
+  // const handlePause = () => {
+  //   setIsRunning(!isRunning);
+  // };
+  // const handleStop = () => {
+  //   setIsRunning(false);
+  //   setIsEditingCountdown(false);
+  //   setTotalStudySeconds(0);
+  //   setRewardedSeconds(0);
+  //   if(countdownMode){
+  //     setCountdownSeconds(0);
+  //     setCountdownMode(false);
+  //   }else{
+  //     setSeconds(0);
+  //   }
+  // };
+
+  /* -------------------- TIMER BUTTONS -------------------- */
+
+  const handleStart = () => {
+    setIsRunningStopwatch(true);
+    setLastInteracted("stopwatch");
+  };
+
+  const handleSetCountdown = () => {
+    setIsEditingCountdown(true);
+    setCountdownInput(formatTime(countdownSeconds || 0));
+    setLastInteracted("countdown");
+  };
+
+  const handlePause = () => {
+    if (lastInteracted === "stopwatch") {
+      setIsRunningStopwatch((p) => !p);
+    } else {
+      setIsRunningCountdown((p) => !p);
+    }
+  };
+
+  const handleStop = () => {
+    if (lastInteracted === "stopwatch") {
+      setIsRunningStopwatch(false);
+      setSeconds(0);
+    } else {
+      setIsRunningCountdown(false);
+      setCountdownSeconds(0);
+    }
+    setIsEditingCountdown(false);
+  };
+
+  /* ---------------- PRIMARY DISPLAY ---------------- */
+
+  const primaryDisplay = () => {
+    if (isEditingCountdown) return countdownInput;
+    if (lastInteracted === "stopwatch") return formatTime(seconds);
+    return formatTime(countdownSeconds);
+  };
+
+  /* -------------------- RENDER SECTION -------------------- */
 
   return (
     <div
       ref={studyingRef}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
       style={{
         backgroundColor: "#a97c70",
         height: "100vh",
         width: "100vw",
-        position: "relative",
         overflow: "hidden",
+        position: "relative",
+        userSelect: "none",
       }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
     >
-      <img src={table} style={{ position: "absolute", top: "57%", width: 1270 }} />
+      {/* TABLE */}
+      <img
+        src={table}
+        style={{
+          position: "absolute",
+          top: "57%",
+          width: "1270px",
+          height: "300px",
+          zIndex: 10,
+        }}
+        draggable="false"
+      />
 
-      <div style={{ position: "absolute", top: "55%", left: "70%" }}>
-        <img src={digitalClock} width={220} />
-        <div style={{ color: "#00ff66", fontSize: 30 }}>{primaryDisplay()}</div>
+      {/* ================== STICKY BUNDLES ================== */}
 
-        <button onClick={handleStart} />
-        <button onClick={handleSetCountdown} />
-        <button onClick={handlePause} />
-        <button onClick={handleStop} />
+      <StickyBundle
+        src={stickynote1}
+        top={58}
+        left={140}
+        handler={handleMouseDown}
+        id="stickynote1"
+      />
+      <StickyBundle
+        src={stickynote2}
+        top={64}
+        left={86}
+        handler={handleMouseDown}
+        id="stickynote2"
+      />
+      <StickyBundle
+        src={stickynote3}
+        top={64}
+        left={190}
+        handler={handleMouseDown}
+        id="stickynote3"
+      />
+      <StickyBundle
+        src={stickynote4}
+        top={70}
+        left={135}
+        handler={handleMouseDown}
+        id="stickynote4"
+      />
+
+      {/* ================== CLOCK UNIT ================== */}
+
+      <div
+        style={{
+          position: "absolute",
+          top: "55%",
+          left: "70%",
+          width: "220px",
+          height: "110px",
+          zIndex: 50,
+        }}
+      >
+        <img
+          src={digitalClock}
+          style={{ width: "100%", height: "100%" }}
+          draggable="false"
+        />
+
+        {/* MAIN LCD DISPLAY */}
+        <div
+          style={{
+            position: "absolute",
+            top: "43px",
+            left: "27px",
+            width: "145px",
+            height: "33px",
+            color: "#00ff66",
+            fontFamily: "monospace",
+            fontSize: "30px",
+            fontWeight: "700",
+            textAlign: "center",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+            pointerEvents: "none", // input overrides this
+          }}
+        >
+          {isEditingCountdown ? (
+            <input
+              ref={countdownInputRef}
+              value={countdownInput}
+              onChange={(e) => setCountdownInput(e.target.value)}
+              onKeyDown={handleCountdownInputKeyDown}
+              style={{
+                width: "100%",
+                height: "100%",
+                fontFamily: "monospace",
+                fontSize: "30px",
+                fontWeight: "700",
+                textAlign: "center",
+                background: "transparent",
+                border: "none",
+                color: "#00ff66",
+                outline: "none",
+                padding: 0,
+                margin: 0,
+                pointerEvents: "auto",
+              }}
+            />
+          ) : (
+            primaryDisplay()
+          )}
+        </div>
+
+        {/* BUTTON HITZONES — you adjust manually */}
+        <button
+          onClick={handleStart}
+          style={{
+            position: "absolute",
+            top: 22,
+            left: 20,
+            width: 45,
+            height: 17,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
+        />
+        <button
+          onClick={handleSetCountdown}
+          style={{
+            position: "absolute",
+            top: 22,
+            left: 65,
+            width: 45,
+            height: 17,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
+        />
+        <button
+          onClick={handlePause}
+          style={{
+            position: "absolute",
+            top: 22,
+            left: 145,
+            width: 35,
+            height: 17,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
+        />
+        <button
+          onClick={handleStop}
+          style={{
+            position: "absolute",
+            top: 22,
+            left: 105,
+            width: 35,
+            height: 17,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
+        />
       </div>
 
+      {/* DRAG PREVIEW */}
       {draggedNote && (
         <img
           src={draggedNote}
           style={{
             position: "fixed",
-            left: mousePos.x - 45,
             top: mousePos.y - 45,
-            width: 90,
+            left: mousePos.x - 45,
+            width: "90px",
+            height: "90px",
             pointerEvents: "none",
+            opacity: 0.85,
+            zIndex: 5000,
+          }}
+        />
+      )}
+
+      {/* RENDER STICKY NOTES */}
+      {stickyNotes.map((note, index) => (
+        <div
+          key={index}
+          onMouseDown={(e) => handleMouseDown(null, e, index)}
+          onClick={(e) => handleNoteClick(index, e)}
+          style={{
+            position: "absolute",
+            left: note.x - 60,
+            top: note.y - 60,
+            width: CONTENT_AREA.PREVIEW_SIZE,
+            height: CONTENT_AREA.PREVIEW_SIZE,
+            cursor: "grab",
+            zIndex: 40,
+          }}
+        >
+          <img
+            src={note.src}
+            style={{ width: "100%", height: "100%", position: "absolute" }}
+            draggable="false"
+          />
+
+          {note.text && (
+            <div
+              style={{
+                position: "absolute",
+                left: 15,
+                top: 16,
+                width: 80,
+                height: 70,
+                fontSize: 8,
+                overflow: "hidden",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {note.text}
+            </div>
+          )}
+
+          {note.drawings?.length > 0 && (
+            <StickyNoteDrawing
+              drawings={note.drawings}
+              position={{
+                x: CONTENT_AREA.PREVIEW_LEFT_OFFSET,
+                y: CONTENT_AREA.PREVIEW_TOP_OFFSET,
+              }}
+              size={CONTENT_AREA.PREVIEW_WIDTH}
+            />
+          )}
+        </div>
+      ))}
+
+      {/* EDITOR */}
+      {isEditorOpen && selectedNoteIndex !== null && (
+        <StickyNoteEditor
+          note={stickyNotes[selectedNoteIndex]}
+          onSave={handleSaveNote}
+          onClose={() => {
+            setIsEditorOpen(false);
+            setSelectedNoteIndex(null);
           }}
         />
       )}
@@ -318,4 +568,253 @@ const Studying = () => {
   );
 };
 
-export default Studying;
+/* ---------------- Sticky Note Bundle ---------------- */
+
+const StickyBundle = ({ src, top, left, handler, id }) => (
+  <img
+    src={src}
+    onMouseDown={(e) => handler(id, e)}
+    style={{
+      position: "absolute",
+      top: `${top}%`,
+      left: `${left}px`,
+      width: "90px",
+      height: "90px",
+      cursor: "grab",
+      zIndex: 20,
+    }}
+    draggable="false"
+  />
+);
+
+/* ---------------- StickyNoteDrawing ---------------- */
+
+const StickyNoteDrawing = ({ drawings, position, size }) => {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#000";
+
+    drawings.forEach((drawing) => {
+      if (drawing.points.length < 2) return;
+
+      ctx.beginPath();
+      ctx.moveTo(
+        drawing.points[0].x * canvas.width,
+        drawing.points[0].y * canvas.height
+      );
+
+      drawing.points.forEach((pt) => {
+        ctx.lineTo(pt.x * canvas.width, pt.y * canvas.height);
+      });
+
+      ctx.stroke();
+    });
+  }, [drawings, size]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      style={{
+        position: "absolute",
+        left: position.x,
+        top: position.y,
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
+
+/* ---------------- StickyNoteEditor ---------------- */
+
+const StickyNoteEditor = ({ note, onSave, onClose }) => {
+  const [text, setText] = useState(note.text || "");
+  const [tool, setTool] = useState("text");
+  const [drawing, setDrawing] = useState(false);
+  const [drawings, setDrawings] = useState(note.drawings || []);
+  const canvasRef = useRef(null);
+
+  const editorSize = 400;
+  const canvasSize = Math.round(
+    editorSize * (CONTENT_AREA.EDITOR_WIDTH_PERCENT / 100)
+  );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 4;
+
+    drawings.forEach((d) => {
+      if (d.points.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(d.points[0].x * canvas.width, d.points[0].y * canvas.height);
+      d.points.forEach((pt) =>
+        ctx.lineTo(pt.x * canvas.width, pt.y * canvas.height)
+      );
+      ctx.stroke();
+    });
+  }, [drawings]);
+
+  const getCoords = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    };
+  };
+
+  const handleDrawStart = (e) => {
+    if (tool !== "pen") return;
+    setDrawing(true);
+    const { x, y } = getCoords(e);
+    setDrawings((prev) => [...prev, { points: [{ x, y }] }]);
+  };
+
+  const handleDrawMove = (e) => {
+    if (!drawing || tool !== "pen") return;
+    const { x, y } = getCoords(e);
+
+    setDrawings((prev) => {
+      const updated = [...prev];
+      updated[updated.length - 1].points.push({ x, y });
+      return updated;
+    });
+  };
+
+  const handleDrawEnd = () => setDrawing(false);
+
+  const clearCanvas = () => setDrawings([]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "rgba(0,0,0,0.5)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 2000,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "relative",
+          width: editorSize,
+          height: editorSize,
+        }}
+      >
+        <img
+          src={note.src}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+          }}
+        />
+
+        {/* Toolbar */}
+        <div
+          style={{
+            position: "absolute",
+            top: -50,
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            gap: 10,
+            background: "white",
+            padding: 10,
+            borderRadius: 5,
+          }}
+        >
+          <button onClick={() => setTool("pen")}>✏️ Pen</button>
+          <button onClick={() => setTool("text")}>📝 Text</button>
+          <button
+            onClick={clearCanvas}
+            style={{ color: "white", background: "red" }}
+          >
+            🗑️ Clear
+          </button>
+        </div>
+
+        {/* Textarea */}
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          style={{
+            position: "absolute",
+            left: `${CONTENT_AREA.EDITOR_LEFT_PERCENT}%`,
+            top: `${CONTENT_AREA.EDITOR_TOP_PERCENT}%`,
+            width: `${CONTENT_AREA.EDITOR_WIDTH_PERCENT}%`,
+            height: `${CONTENT_AREA.EDITOR_HEIGHT_PERCENT}%`,
+            background: "transparent",
+            border: "none",
+            resize: "none",
+            fontSize: 20,
+            outline: "none",
+            zIndex: 5,
+          }}
+        />
+
+        {/* Canvas */}
+        <canvas
+          ref={canvasRef}
+          width={canvasSize}
+          height={canvasSize}
+          onMouseDown={handleDrawStart}
+          onMouseMove={handleDrawMove}
+          onMouseUp={handleDrawEnd}
+          onMouseLeave={handleDrawEnd}
+          style={{
+            position: "absolute",
+            left: `${CONTENT_AREA.EDITOR_LEFT_PERCENT}%`,
+            top: `${CONTENT_AREA.EDITOR_TOP_PERCENT}%`,
+            width: `${CONTENT_AREA.EDITOR_WIDTH_PERCENT}%`,
+            height: `${CONTENT_AREA.EDITOR_HEIGHT_PERCENT}%`,
+            zIndex: 4,
+          }}
+        />
+
+        {/* Controls */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: -50,
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            gap: 10,
+          }}
+        >
+          <button onClick={onClose}>Cancel</button>
+          <button
+            onClick={() => onSave(text, drawings)}
+            style={{ background: "#007bff", color: "white" }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Studying .. remove all duplicate states that issues in verec deploynemntr
