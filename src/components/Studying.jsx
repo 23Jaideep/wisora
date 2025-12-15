@@ -38,12 +38,16 @@ const TRASH_BIN_DIMENSIONS = {
 
 const COIN_INTERVAL = 60;
 
-/* Sticky note map: Mapping bundle placeholder to actual sticky note asset */
+/* Sticky note map (MISSING in Code 1, added from Code 2) */
 const noteMap = {
-  stickynote1: greenstickynote,
-  stickynote2: pinkstickynote,
-  stickynote3: bluestickynote,
-  stickynote4: yellowstickynote,
+  stickynote1,
+  stickynote2,
+  stickynote3,
+  stickynote4,
+  yellowstickynote,
+  bluestickynote,
+  pinkstickynote,
+  greenstickynote,
 };
 
 // =======================================================================
@@ -52,10 +56,23 @@ const noteMap = {
 
 const Studying = () => {
   const { coins, setCoins } = useCoins();
-  const studyingRef = useRef(null);
-  const audioRef = useRef(new Audio(clickSound));
 
-  /* -------------------- STUDY TRACKING STATE -------------------- */
+  /* -------------------- TIMER SYSTEM (Unified State) -------------------- */
+  const [seconds, setSeconds] = useState(0); // Stopwatch time
+  const [countdownSeconds, setCountdownSeconds] = useState(0); // Countdown time
+
+  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
+  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
+
+  // inline countdown editor
+  const [isEditingCountdown, setIsEditingCountdown] = useState(false);
+  const countdownInputRef = useRef(null);
+  const [countdownInput, setCountdownInput] = useState("00:00:00");
+
+  // LCD display selection
+  const [lastInteracted, setLastInteracted] = useState("stopwatch");
+
+  /* -------------------- STUDY TRACKING (Kept from Code 1 & 2) -------------------- */
   const [totalStudySeconds, setTotalStudySeconds] = useState(() => {
     const saved = localStorage.getItem("wisora_totalStudySeconds");
     return saved ? Number(saved) : 0;
@@ -65,17 +82,7 @@ const Studying = () => {
     return saved ? Number(saved) : 0;
   });
 
-  /* -------------------- TIMER SYSTEM STATE -------------------- */
-  const [seconds, setSeconds] = useState(0); // Stopwatch time
-  const [countdownSeconds, setCountdownSeconds] = useState(0); // Countdown time
-  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
-  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
-  const [isEditingCountdown, setIsEditingCountdown] = useState(false);
-  const countdownInputRef = useRef(null);
-  const [countdownInput, setCountdownInput] = useState("00:00:00");
-  const [lastInteracted, setLastInteracted] = useState("stopwatch");
-
-  /* -------------------- STICKY NOTE STATE -------------------- */
+  /* -------------------- STICKY NOTE STATE (Kept from Code 1) -------------------- */
   const [draggedNote, setDraggedNote] = useState(null);
   const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -83,11 +90,11 @@ const Studying = () => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
   const [isOverTrashBin, setIsOverTrashBin] = useState(false);
-
+  const studyingRef = useRef(null);
+  const audioRef = useRef(new Audio(clickSound));
   const [stickyNotes, setStickyNotes] = useState(() => {
     try {
       const saved = localStorage.getItem("stickyNotes");
-      // Use the noteMap sources for consistency when loading new notes
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -95,7 +102,7 @@ const Studying = () => {
   });
 
 
-  /* ================= EFFECTS ================= */
+  /* ================= EFFECTS (Unified Logic) ================= */
 
   /* Save all persistence data */
   useEffect(() => {
@@ -109,21 +116,13 @@ const Studying = () => {
     localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes));
   }, [stickyNotes]);
 
-  /* Increment total study time */
+  /* Increment total study time (FIXED: Uses both running states) */
   useEffect(() => {
-    // Only increment total study time if *any* timer is running
     if (!isRunningStopwatch && !isRunningCountdown) return;
+    setTotalStudySeconds((prev) => prev + 1);
+  }, [seconds, countdownSeconds, isRunningStopwatch, isRunningCountdown]);
 
-    // Use a shared timer loop to trigger the total study seconds update every second
-    const id = setInterval(() => {
-      setTotalStudySeconds((prev) => prev + 1);
-    }, 1000);
-
-    return () => clearInterval(id);
-  }, [isRunningStopwatch, isRunningCountdown]);
-
-
-  /* Coin reward */
+  /* Coin reward (FIXED: Dependent only on total study time) */
   useEffect(() => {
     if (totalStudySeconds - rewardedSeconds >= COIN_INTERVAL) {
       setCoins((c) => c + 1);
@@ -132,7 +131,7 @@ const Studying = () => {
   }, [totalStudySeconds, rewardedSeconds, setCoins]);
 
 
-  /* STOPWATCH LOOP */
+  /* STOPWATCH LOOP (Kept from Code 1/2) */
   useEffect(() => {
     let id;
     if (isRunningStopwatch) {
@@ -141,7 +140,7 @@ const Studying = () => {
     return () => clearInterval(id);
   }, [isRunningStopwatch]);
 
-  /* COUNTDOWN LOOP */
+  /* COUNTDOWN LOOP (Kept from Code 1/2) */
   useEffect(() => {
     let id;
     if (isRunningCountdown) {
@@ -162,12 +161,13 @@ const Studying = () => {
   useEffect(() => {
     if (isEditingCountdown && countdownInputRef.current) {
       countdownInputRef.current.focus();
+      // Optional: setSelectionRange(0, 1) to select the first char
       countdownInputRef.current.setSelectionRange(0, 1);
     }
   }, [isEditingCountdown]);
 
 
-  /* ================= UTILITY & INPUT FUNCTIONS ================= */
+  /* ================= UTILITY FUNCTIONS ================= */
 
   const formatTime = (t) => {
     const h = Math.floor(t / 3600);
@@ -184,74 +184,23 @@ const Studying = () => {
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
   };
 
-  /* DIGIT-BY-DIGIT COUNTDOWN INPUT (Taken from Code 2) */
+  /* Logic to handle Enter key in countdown input (Added from Code 2) */
   const handleCountdownInputKeyDown = (e) => {
     if (e.key === "Enter") {
       const parsed = parseTime(countdownInput);
-      if (!parsed || parsed <= 0) return; // Silent failure on invalid time
-
-      setCountdownSeconds(parsed);
-      setIsEditingCountdown(false);
-      setIsRunningCountdown(true);
-      setLastInteracted("countdown");
-      return;
-    }
-
-    if (e.key === "Escape") {
-      setIsEditingCountdown(false);
-      return;
-    }
-
-    if (/^\d$/.test(e.key)) {
-      e.preventDefault();
-      const editable = [0, 1, 3, 4, 6, 7]; // Indices: H H : M M : S S
-      let pos = countdownInputRef.current.selectionStart ?? 0;
-
-      if (!editable.includes(pos)) {
-        pos = editable.find((p) => p >= pos) ?? editable.at(-1);
+      if (parsed !== null && parsed > 0) { // Only set/start if time is valid and > 0
+        setCountdownSeconds(parsed);
+        setIsEditingCountdown(false);
+        setLastInteracted("countdown"); // Ensure countdown display is primary
+        setIsRunningCountdown(true);
+      } else if (parsed === 0) {
+        setCountdownSeconds(0);
+        setIsEditingCountdown(false);
       }
-
-      const chars = countdownInput.split("");
-      chars[pos] = e.key;
-      setCountdownInput(chars.join(""));
-
-      const nextIndex = editable.indexOf(pos) + 1;
-      const nextPos = editable[Math.min(nextIndex, editable.length - 1)];
-
-      requestAnimationFrame(() =>
-        countdownInputRef.current.setSelectionRange(nextPos, nextPos + 1)
-      );
-      return;
-    }
-
-    if (e.key === "Backspace") {
-      e.preventDefault();
-      const editable = [0, 1, 3, 4, 6, 7];
-      let pos = countdownInputRef.current.selectionStart ?? 0;
-
-      if (!editable.includes(pos)) {
-        pos = editable.find((p) => p < pos) ?? editable.at(-1);
-      }
-
-      const idx = editable.indexOf(pos);
-      const prevPos = editable[Math.max(idx - 1, 0)];
-
-      const chars = countdownInput.split("");
-      chars[prevPos] = "0";
-      setCountdownInput(chars.join(""));
-
-      requestAnimationFrame(() =>
-        countdownInputRef.current.setSelectionRange(prevPos, prevPos + 1)
-      );
-      return;
-    }
-
-    if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
     }
   };
 
-  /* -------------------- TIMER BUTTONS -------------------- */
+  /* -------------------- TIMER BUTTONS (Unified Logic) -------------------- */
 
   const handleStart = () => {
     setIsRunningStopwatch(true);
@@ -260,11 +209,11 @@ const Studying = () => {
   };
 
   const handleSetCountdown = () => {
-    if (!isEditingCountdown) { // Start editing mode
+    if (!isEditingCountdown) { // Only allow setting if not already editing
       setIsEditingCountdown(true);
-      setCountdownInput(formatTime(countdownSeconds || 0));
+      setCountdownInput(formatTime(countdownSeconds));
       setLastInteracted("countdown");
-    } else { // Confirm/Save input mode
+    } else { // If already editing, save it (same as Enter key logic)
       const parsed = parseTime(countdownInput);
       if (parsed !== null && parsed > 0) {
         setCountdownSeconds(parsed);
@@ -307,7 +256,7 @@ const Studying = () => {
   };
 
 
-  /* ================= DRAG & DROP LOGIC ================= */
+  /* ================= DRAG & DROP LOGIC (Kept from Code 1) ================= */
 
   const getTrashRect = () => ({
     x: TRASH_BIN_DIMENSIONS.left,
@@ -377,8 +326,8 @@ const Studying = () => {
         )
       );
     } else {
-      // Logic for dropping a new note (simplified bounds check, keeping original intention)
-      if (y > (rect.height * 0.5) && y < (rect.height * 0.9)) {
+      // Logic for dropping a new note
+      if (y > (rect.height * 0.5) && y < (rect.height * 0.9)) { // Simple check to ensure drop is roughly on the desk area
         setStickyNotes((prev) => [
           ...prev,
           { src: draggedNote, x, y, text: "", drawings: [] },
@@ -392,7 +341,26 @@ const Studying = () => {
     setIsOverTrashBin(false);
   };
 
-  /* -------------------- RENDER SECTION -------------------- */
+  const handleNoteClick = (index, e) => {
+    e.stopPropagation();
+    if (!draggedNote) {
+      setSelectedNoteIndex(index);
+      setIsEditorOpen(true);
+    }
+  };
+
+  const handleSaveNote = (text, drawings) => {
+    setStickyNotes((prev) =>
+      prev.map((note, i) =>
+        i === selectedNoteIndex ? { ...note, text, drawings } : note
+      )
+    );
+    setIsEditorOpen(false);
+    setSelectedNoteIndex(null);
+  };
+
+
+  /* -------------------- RENDER SECTION (Kept from Code 1) -------------------- */
 
   return (
     <div
@@ -496,9 +464,8 @@ const Studying = () => {
             <input
               ref={countdownInputRef}
               value={countdownInput}
-              // onChange is intentionally passive to allow onKeyDown to control input
-              onChange={(e) => { /* Only keep value synchronized for display */ }}
-              onKeyDown={handleCountdownInputKeyDown}
+              onChange={(e) => setCountdownInput(e.target.value)}
+              onKeyDown={handleCountdownInputKeyDown} // Added keydown handler
               style={{
                 width: "100%",
                 height: "100%",
@@ -593,7 +560,7 @@ const Studying = () => {
         />
       )}
       
-      {/* Trash Bin indicator (Taken from Code 2) */}
+      {/* Trash Bin indicator (Visible when dragging an existing note over it) */}
       {isOverTrashBin && (
         <div
           style={{
@@ -774,7 +741,6 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.lineWidth = 4;
-    ctx.strokeStyle = "#000";
 
     drawings.forEach((d) => {
       if (d.points.length < 2) return;
@@ -896,8 +862,8 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
             resize: "none",
             fontSize: 20,
             outline: "none",
-            zIndex: tool === "text" ? 5 : 3, // Only high zIndex when editing text
-            color: 'black',
+            zIndex: tool === "text" ? 5 : 3, // Only have high zIndex when editing text
+            color: 'black', // Ensure text is visible
             pointerEvents: tool === 'text' ? 'auto' : 'none',
           }}
         />
@@ -917,7 +883,7 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
             top: `${CONTENT_AREA.EDITOR_TOP_PERCENT}%`,
             width: `${CONTENT_AREA.EDITOR_WIDTH_PERCENT}%`,
             height: `${CONTENT_AREA.EDITOR_HEIGHT_PERCENT}%`,
-            zIndex: tool === "pen" ? 5 : 4, // Only high zIndex when drawing
+            zIndex: tool === "pen" ? 5 : 4, // Only have high zIndex when drawing
             cursor: tool === "pen" ? 'crosshair' : 'default',
             pointerEvents: tool === 'pen' ? 'auto' : 'none',
           }}
