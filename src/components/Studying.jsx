@@ -11,7 +11,7 @@ import bluestickynote from '../assets/bluestickynote.png';
 import pinkstickynote from '../assets/pinkstickynote.png';
 import greenstickynote from '../assets/greenstickynote.png';
 import digitalClock from '../assets/digitalClock.png';
-import { useCoins } from '../context/coinContext';
+import { useCoins } from '../context/CoinContext';
 // --- Configuration for Text/Drawing area relative to the 100% note size ---
 const CONTENT_AREA = {
   EDITOR_LEFT_PERCENT: 15,
