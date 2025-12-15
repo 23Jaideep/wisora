@@ -1,4 +1,4 @@
-import { useCoins } from "../context/CoinContext";
+import { useCoins } from "../context/coinContext";
 
 export default function CoinHUD() {
   const { coins } = useCoins();
