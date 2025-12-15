@@ -817,4 +817,4 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
   );
 };
 
-export default Studying .. remove all duplicate states that issues in verec deploynemntr
+export default Studying;
