@@ -11,6 +11,7 @@ import bluestickynote from '../assets/bluestickynote.png';
 import pinkstickynote from '../assets/pinkstickynote.png';
 import greenstickynote from '../assets/greenstickynote.png';
 import digitalClock from '../assets/digitalClock.png';
+import { useCoins } from '../context/coinContext';
 // --- Configuration for Text/Drawing area relative to the 100% note size ---
 const CONTENT_AREA = {
   // Percentage from the left/top edge of the sticky note container (400x400 editor size used for reference).
@@ -35,11 +36,21 @@ const TRASH_BIN_DIMENSIONS = {
     height: 100,
 };
 
+const COIN_INTERVAL = 60;
 // =======================================================================
 // === 1. Studying Component (Main App) ===
 // =======================================================================
 
 const Studying = () => {
+  const {coins, setCoins} = useCoins();
+  const [totalStudySeconds, setTotalStudySeconds] = useState(() => {
+  const saved = localStorage.getItem("wisora_totalStudySeconds");
+  return saved ? Number(saved) : 0;
+});
+  const [rewardedSeconds, setRewardedSeconds] = useState(()=>{
+    const saved = localStorage.getItem("wisora_rewardedSeconds");
+    return saved? Number(saved): 0;
+  })
   const [seconds, setSeconds] = useState(0);
   const [isEditingCountdown, setIsEditingCountdown] = useState(false);
   const countdownInputRef = useRef(null);
@@ -64,6 +75,21 @@ const Studying = () => {
       return [];
     }
   });
+  useEffect(()=>{
+    localStorage.setItem("wisora_coins", coins);
+    localStorage.setItem("wisora_totalStudySeconds", totalStudySeconds);
+    localStorage.setItem("wisora_rewardedSeconds", rewardedSeconds);
+  }, [coins, totalStudySeconds, rewardedSeconds]);
+  useEffect(()=>{
+    if(!isRunning) return;
+    setTotalStudySeconds(prev=>prev+1);
+  }, [seconds, countdownSeconds]);
+  useEffect(()=>{
+    if(totalStudySeconds-rewardedSeconds>=COIN_INTERVAL){
+      setCoins(prev=>prev+1);
+      setRewardedSeconds(prev=>prev+COIN_INTERVAL);
+    }
+  }, [totalStudySeconds]);
 useEffect(() => {
     localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes));
   }, [stickyNotes]);
@@ -337,6 +363,8 @@ useEffect(()=>{
   const handleStop = () => {
     setIsRunning(false);
     setIsEditingCountdown(false);
+    setTotalStudySeconds(0);
+    setRewardedSeconds(0);
     if(countdownMode){
       setCountdownSeconds(0);
       setCountdownMode(false);

@@ -113,8 +113,6 @@ const Home = () => {
   );
 };
 
-
-
   const bookshelfMenuRef = useRef(null);
   const bookshelfOptions = [
     {src: bookshelf,style: {top:'0%', left:'0%'}},
