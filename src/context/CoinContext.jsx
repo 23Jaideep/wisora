@@ -9,7 +9,7 @@ export const CoinProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    localStorage.setItem("wisora_coins", coins);
+    localStorage.setItem("wisora_coins", String(coins));
   }, [coins]);
 
   return (
