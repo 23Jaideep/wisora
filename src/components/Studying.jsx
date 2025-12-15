@@ -48,7 +48,6 @@ const Studying = () => {
     const saved = localStorage.getItem("wisora_rewardedSeconds");
     return saved? Number(saved): 0;
   })
-  const [seconds, setSeconds] = useState(0);
   const [isEditingCountdown, setIsEditingCountdown] = useState(false);
   const countdownInputRef = useRef(null);
   const [countdownInput, setCountdownInput] = useState("00:00:00");
@@ -90,12 +89,6 @@ const Studying = () => {
 useEffect(() => {
     localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes));
   }, [stickyNotes]);
-
-  const [draggedNote, setDraggedNote] = useState(null);
-  const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
-  const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [isOverTrashBin, setIsOverTrashBin] = useState(false);
 
   const getTrashRect = () => ({
     x: TRASH_BIN_DIMENSIONS.left,
@@ -177,9 +170,6 @@ useEffect(() => {
     setIsOverTrashBin(false);
   };
 
-  const [selectedNoteIndex, setSelectedNoteIndex] = useState(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-
   const handleNoteClick = (index, e) => {
     e.stopPropagation();
     if (!draggedNote) {
@@ -203,13 +193,9 @@ useEffect(() => {
   // TRUE DUAL TIMER MODE ✔
   const [seconds, setSeconds] = useState(0);
   const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
-
-  const [countdownSeconds, setCountdownSeconds] = useState(0);
   const [isRunningCountdown, setIsRunningCountdown] = useState(false);
 
   // inline countdown editor
-  const [isEditingCountdown, setIsEditingCountdown] = useState(false);
-  const countdownInputRef = useRef(null);
   const [countdownInput, setCountdownInput] = useState("00:00:00");
 
   // LCD display selection
