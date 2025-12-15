@@ -1,26 +1,21 @@
-import React, { useState, useRef, useEffect } from "react";
-import clickSound from "../assets/click.mp3";
-import "./Studying.css";
+import React, { useState, useRef, useEffect } from 'react';
+import clickSound from '../assets/click.mp3';
+import './Studying.css';
 
 // --- Assets ---
-import table from "../assets/table.png";
-import stickynote1 from "../assets/stickynote1.png"; // Placeholder image for bundle 1
-import stickynote2 from "../assets/stickynote2.png"; // Placeholder image for bundle 2
-import stickynote3 from "../assets/stickynote3.png"; // Placeholder image for bundle 3
-import stickynote4 from "../assets/stickynote4.png"; // Placeholder image for bundle 4
+import table from '../assets/table.png';
+import stickynote1 from '../assets/stickynote1.png';
+import stickynote2 from '../assets/stickynote2.png';
+import stickynote3 from '../assets/stickynote3.png';
+import stickynote4 from '../assets/stickynote4.png';
+import yellowstickynote from '../assets/yellowstickynote.png';
+import bluestickynote from '../assets/bluestickynote.png';
+import pinkstickynote from '../assets/pinkstickynote.png';
+import greenstickynote from '../assets/greenstickynote.png';
+import digitalClock from '../assets/digitalClock.png';
+import { useCoins } from '../context/CoinContext';
 
-// Actual sticky notes to be dragged out
-import yellowstickynote from "../assets/yellowstickynote.png";
-import bluestickynote from "../assets/bluestickynote.png";
-import pinkstickynote from "../assets/pinkstickynote.png";
-import greenstickynote from "../assets/greenstickynote.png";
-
-import digitalClock from "../assets/digitalClock.png";
-// NOTE: Since the original code did not include `useCoins`, I'm assuming it's not needed for this version.
-// import { useCoins } from "../context/CoinContext";
-
-/* ---------------- GLOBAL CONFIG / CONSTANTS ---------------- */
-
+// --- Configuration for Text/Drawing area relative to the 100% note size ---
 const CONTENT_AREA = {
   EDITOR_LEFT_PERCENT: 15,
   EDITOR_TOP_PERCENT: 15,
@@ -41,46 +36,278 @@ const TRASH_BIN_DIMENSIONS = {
   height: 100,
 };
 
+const COIN_INTERVAL = 60;
+
+/* Sticky note map: Mapping bundle placeholder to actual sticky note asset */
+const noteMap = {
+  stickynote1: greenstickynote,
+  stickynote2: pinkstickynote,
+  stickynote3: bluestickynote,
+  stickynote4: yellowstickynote,
+};
+
 // =======================================================================
 // === 1. Studying Component (Main App) ===
 // =======================================================================
 
 const Studying = () => {
+  const { coins, setCoins } = useCoins();
   const studyingRef = useRef(null);
   const audioRef = useRef(new Audio(clickSound));
 
-  /* ---------------- STICKY NOTES SYSTEM ---------------- */
+  /* -------------------- STUDY TRACKING STATE -------------------- */
+  const [totalStudySeconds, setTotalStudySeconds] = useState(() => {
+    const saved = localStorage.getItem("wisora_totalStudySeconds");
+    return saved ? Number(saved) : 0;
+  });
+  const [rewardedSeconds, setRewardedSeconds] = useState(() => {
+    const saved = localStorage.getItem("wisora_rewardedSeconds");
+    return saved ? Number(saved) : 0;
+  });
 
-  // Mapping the bundle image IDs to the actual sticky note image source
-  const noteMap = {
-    stickynote1: greenstickynote,
-    stickynote2: pinkstickynote,
-    stickynote3: bluestickynote,
-    stickynote4: yellowstickynote,
-  };
+  /* -------------------- TIMER SYSTEM STATE -------------------- */
+  const [seconds, setSeconds] = useState(0); // Stopwatch time
+  const [countdownSeconds, setCountdownSeconds] = useState(0); // Countdown time
+  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
+  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
+  const [isEditingCountdown, setIsEditingCountdown] = useState(false);
+  const countdownInputRef = useRef(null);
+  const [countdownInput, setCountdownInput] = useState("00:00:00");
+  const [lastInteracted, setLastInteracted] = useState("stopwatch");
+
+  /* -------------------- STICKY NOTE STATE -------------------- */
+  const [draggedNote, setDraggedNote] = useState(null);
+  const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [selectedNoteIndex, setSelectedNoteIndex] = useState(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
+  const [isOverTrashBin, setIsOverTrashBin] = useState(false);
 
   const [stickyNotes, setStickyNotes] = useState(() => {
     try {
       const saved = localStorage.getItem("stickyNotes");
+      // Use the noteMap sources for consistency when loading new notes
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
+
+  /* ================= EFFECTS ================= */
+
+  /* Save all persistence data */
   useEffect(() => {
-    localStorage.setItem("stickyNotes", JSON.stringify(stickyNotes));
+    localStorage.setItem("wisora_coins", coins);
+    localStorage.setItem("wisora_totalStudySeconds", totalStudySeconds);
+    localStorage.setItem("wisora_rewardedSeconds", rewardedSeconds);
+  }, [coins, totalStudySeconds, rewardedSeconds]);
+
+  /* Save sticky notes */
+  useEffect(() => {
+    localStorage.setItem('stickyNotes', JSON.stringify(stickyNotes));
   }, [stickyNotes]);
 
-  const [draggedNote, setDraggedNote] = useState(null);
-  const [draggedNoteIndex, setDraggedNoteIndex] = useState(null);
-  const [isDraggingExistingNote, setIsDraggingExistingNote] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [isOverTrashBin, setIsOverTrashBin] = useState(false);
-  const [selectedNoteIndex, setSelectedNoteIndex] = useState(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  /* Increment total study time */
+  useEffect(() => {
+    // Only increment total study time if *any* timer is running
+    if (!isRunningStopwatch && !isRunningCountdown) return;
 
-  /* --- Drag & Drop Handlers --- */
+    // Use a shared timer loop to trigger the total study seconds update every second
+    const id = setInterval(() => {
+      setTotalStudySeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [isRunningStopwatch, isRunningCountdown]);
+
+
+  /* Coin reward */
+  useEffect(() => {
+    if (totalStudySeconds - rewardedSeconds >= COIN_INTERVAL) {
+      setCoins((c) => c + 1);
+      setRewardedSeconds((r) => r + COIN_INTERVAL);
+    }
+  }, [totalStudySeconds, rewardedSeconds, setCoins]);
+
+
+  /* STOPWATCH LOOP */
+  useEffect(() => {
+    let id;
+    if (isRunningStopwatch) {
+      id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    }
+    return () => clearInterval(id);
+  }, [isRunningStopwatch]);
+
+  /* COUNTDOWN LOOP */
+  useEffect(() => {
+    let id;
+    if (isRunningCountdown) {
+      id = setInterval(() => {
+        setCountdownSeconds((prev) => {
+          if (prev <= 1) {
+            setIsRunningCountdown(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(id);
+  }, [isRunningCountdown]);
+
+  /* Focus countdown input */
+  useEffect(() => {
+    if (isEditingCountdown && countdownInputRef.current) {
+      countdownInputRef.current.focus();
+      countdownInputRef.current.setSelectionRange(0, 1);
+    }
+  }, [isEditingCountdown]);
+
+
+  /* ================= UTILITY & INPUT FUNCTIONS ================= */
+
+  const formatTime = (t) => {
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = t % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  };
+
+  const parseTime = (str) => {
+    const parts = str.split(":").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    if (parts[1] > 59 || parts[2] > 59) return null;
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  };
+
+  /* DIGIT-BY-DIGIT COUNTDOWN INPUT (Taken from Code 2) */
+  const handleCountdownInputKeyDown = (e) => {
+    if (e.key === "Enter") {
+      const parsed = parseTime(countdownInput);
+      if (!parsed || parsed <= 0) return; // Silent failure on invalid time
+
+      setCountdownSeconds(parsed);
+      setIsEditingCountdown(false);
+      setIsRunningCountdown(true);
+      setLastInteracted("countdown");
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setIsEditingCountdown(false);
+      return;
+    }
+
+    if (/^\d$/.test(e.key)) {
+      e.preventDefault();
+      const editable = [0, 1, 3, 4, 6, 7]; // Indices: H H : M M : S S
+      let pos = countdownInputRef.current.selectionStart ?? 0;
+
+      if (!editable.includes(pos)) {
+        pos = editable.find((p) => p >= pos) ?? editable.at(-1);
+      }
+
+      const chars = countdownInput.split("");
+      chars[pos] = e.key;
+      setCountdownInput(chars.join(""));
+
+      const nextIndex = editable.indexOf(pos) + 1;
+      const nextPos = editable[Math.min(nextIndex, editable.length - 1)];
+
+      requestAnimationFrame(() =>
+        countdownInputRef.current.setSelectionRange(nextPos, nextPos + 1)
+      );
+      return;
+    }
+
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const editable = [0, 1, 3, 4, 6, 7];
+      let pos = countdownInputRef.current.selectionStart ?? 0;
+
+      if (!editable.includes(pos)) {
+        pos = editable.find((p) => p < pos) ?? editable.at(-1);
+      }
+
+      const idx = editable.indexOf(pos);
+      const prevPos = editable[Math.max(idx - 1, 0)];
+
+      const chars = countdownInput.split("");
+      chars[prevPos] = "0";
+      setCountdownInput(chars.join(""));
+
+      requestAnimationFrame(() =>
+        countdownInputRef.current.setSelectionRange(prevPos, prevPos + 1)
+      );
+      return;
+    }
+
+    if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    }
+  };
+
+  /* -------------------- TIMER BUTTONS -------------------- */
+
+  const handleStart = () => {
+    setIsRunningStopwatch(true);
+    setIsEditingCountdown(false); // Stop editing if user clicks Start
+    setLastInteracted("stopwatch");
+  };
+
+  const handleSetCountdown = () => {
+    if (!isEditingCountdown) { // Start editing mode
+      setIsEditingCountdown(true);
+      setCountdownInput(formatTime(countdownSeconds || 0));
+      setLastInteracted("countdown");
+    } else { // Confirm/Save input mode
+      const parsed = parseTime(countdownInput);
+      if (parsed !== null && parsed > 0) {
+        setCountdownSeconds(parsed);
+        setIsEditingCountdown(false);
+        setLastInteracted("countdown");
+        setIsRunningCountdown(true);
+      } else if (parsed === 0) {
+        setCountdownSeconds(0);
+        setIsEditingCountdown(false);
+      }
+    }
+  };
+
+  const handlePause = () => {
+    if (isEditingCountdown) return; // Ignore pause while editing
+    if (lastInteracted === "stopwatch") {
+      setIsRunningStopwatch((p) => !p);
+    } else {
+      setIsRunningCountdown((p) => !p);
+    }
+  };
+
+  const handleStop = () => {
+    setIsEditingCountdown(false); // Always stop editing
+    if (lastInteracted === "stopwatch") {
+      setIsRunningStopwatch(false);
+      setSeconds(0);
+    } else {
+      setIsRunningCountdown(false);
+      setCountdownSeconds(0);
+    }
+  };
+
+  /* ---------------- PRIMARY DISPLAY ---------------- */
+
+  const primaryDisplay = () => {
+    if (isEditingCountdown) return countdownInput;
+    if (lastInteracted === "stopwatch") return formatTime(seconds);
+    return formatTime(countdownSeconds);
+  };
+
+
+  /* ================= DRAG & DROP LOGIC ================= */
 
   const getTrashRect = () => ({
     x: TRASH_BIN_DIMENSIONS.left,
@@ -100,12 +327,10 @@ const Studying = () => {
     } catch {}
 
     if (index !== null) {
-      // Existing note click/drag
       setDraggedNoteIndex(index);
       setDraggedNote(stickyNotes[index].src);
       setIsDraggingExistingNote(true);
     } else {
-      // New note bundle click/drag
       setDraggedNote(noteMap[noteKey]);
       setDraggedNoteIndex(null);
       setIsDraggingExistingNote(false);
@@ -152,233 +377,19 @@ const Studying = () => {
         )
       );
     } else {
-      // Add new note if not dragging existing and dropped in bounds (optional check omitted)
-      setStickyNotes((prev) => [
-        ...prev,
-        { src: draggedNote, x, y, text: "", drawings: [] },
-      ]);
+      // Logic for dropping a new note (simplified bounds check, keeping original intention)
+      if (y > (rect.height * 0.5) && y < (rect.height * 0.9)) {
+        setStickyNotes((prev) => [
+          ...prev,
+          { src: draggedNote, x, y, text: "", drawings: [] },
+        ]);
+      }
     }
 
     setDraggedNote(null);
     setDraggedNoteIndex(null);
     setIsDraggingExistingNote(false);
     setIsOverTrashBin(false);
-  };
-
-  /* --- Editor Handlers --- */
-
-  const handleNoteClick = (index, e) => {
-    e.stopPropagation();
-    if (!draggedNote) {
-      setSelectedNoteIndex(index);
-      setIsEditorOpen(true);
-    }
-  };
-
-  const handleSaveNote = (text, drawings) => {
-    setStickyNotes((prev) =>
-      prev.map((note, i) =>
-        i === selectedNoteIndex ? { ...note, text, drawings } : note
-      )
-    );
-    setIsEditorOpen(false);
-    setSelectedNoteIndex(null);
-  };
-
-  /* -------------------- TIMER SYSTEM -------------------- */
-
-  const [seconds, setSeconds] = useState(0);
-  const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
-
-  const [countdownSeconds, setCountdownSeconds] = useState(0);
-  const [isRunningCountdown, setIsRunningCountdown] = useState(false);
-
-  const [isEditingCountdown, setIsEditingCountdown] = useState(false);
-  const countdownInputRef = useRef(null);
-  const [countdownInput, setCountdownInput] = useState("00:00:00");
-
-  const [lastInteracted, setLastInteracted] = useState("stopwatch");
-
-  /* STOPWATCH LOOP */
-  useEffect(() => {
-    let id;
-    if (isRunningStopwatch) {
-      id = setInterval(() => setSeconds((s) => s + 1), 1000);
-    }
-    return () => clearInterval(id);
-  }, [isRunningStopwatch]);
-
-  /* COUNTDOWN LOOP */
-  useEffect(() => {
-    let id;
-    if (isRunningCountdown) {
-      id = setInterval(() => {
-        setCountdownSeconds((prev) => {
-          if (prev <= 1) {
-            setIsRunningCountdown(false);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(id);
-  }, [isRunningCountdown]);
-
-  useEffect(() => {
-    if (isEditingCountdown && countdownInputRef.current) {
-      countdownInputRef.current.focus();
-      // Select the first digit for easy overwrite
-      countdownInputRef.current.setSelectionRange(0, 1);
-    }
-  }, [isEditingCountdown]);
-
-  /* --- Time Utility Functions --- */
-
-  const formatTime = (t) => {
-    const h = Math.floor(t / 3600);
-    const m = Math.floor((t % 3600) / 60);
-    const s = t % 60;
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${pad(h)}:${pad(m)}:${pad(s)}`;
-  };
-
-  const parseTime = (str) => {
-    const parts = str.split(":").map(Number);
-    if (parts.length !== 3 || parts.some(isNaN)) return null;
-    if (parts[1] > 59 || parts[2] > 59) return null;
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  };
-
-  /* DIGIT-BY-DIGIT COUNTDOWN INPUT (Incorporated from your submission) */
-  const handleCountdownInputKeyDown = (e) => {
-    if (e.key === "Enter") {
-      const parsed = parseTime(countdownInput);
-      if (!parsed || parsed <= 0) return alert("Invalid time");
-
-      setCountdownSeconds(parsed);
-      setIsEditingCountdown(false);
-      setIsRunningCountdown(true);
-      setLastInteracted("countdown");
-      return;
-    }
-
-    if (e.key === "Escape") {
-      setIsEditingCountdown(false);
-      return;
-    }
-
-    // Only allow typing digits and control key presses (like backspace, arrow keys)
-    if (/^\d$/.test(e.key)) {
-      e.preventDefault();
-      const editable = [0, 1, 3, 4, 6, 7]; // Indices of editable digits (H:H:M:M:S:S)
-      let pos = countdownInputRef.current.selectionStart ?? 0;
-
-      // Move caret to the nearest editable position if not on one
-      if (!editable.includes(pos)) {
-        pos = editable.find((p) => p >= pos) ?? editable.at(-1);
-      }
-
-      const chars = countdownInput.split("");
-      chars[pos] = e.key;
-      setCountdownInput(chars.join(""));
-
-      // Move caret to the next editable position
-      const nextIndex = editable.indexOf(pos) + 1;
-      const nextPos = editable[Math.min(nextIndex, editable.length - 1)];
-
-      requestAnimationFrame(() =>
-        countdownInputRef.current.setSelectionRange(nextPos, nextPos + 1)
-      );
-      return;
-    }
-
-    if (e.key === "Backspace") {
-      e.preventDefault();
-      const editable = [0, 1, 3, 4, 6, 7];
-      let pos = countdownInputRef.current.selectionStart ?? 0;
-
-      // Move caret backward to the nearest editable position
-      if (!editable.includes(pos)) {
-        pos = editable.find((p) => p < pos) ?? editable.at(-1);
-      }
-
-      // Identify the position *before* the current caret position to clear
-      const idx = editable.indexOf(pos);
-      const prevPos = editable[Math.max(idx - 1, 0)];
-
-      const chars = countdownInput.split("");
-      chars[prevPos] = "0"; // Clear the digit to '0'
-      setCountdownInput(chars.join(""));
-
-      // Move caret to the cleared position (the one we just set to '0')
-      requestAnimationFrame(() =>
-        countdownInputRef.current.setSelectionRange(prevPos, prevPos + 1)
-      );
-      return;
-    }
-
-    // Prevent input of non-numeric, non-control keys
-    if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-    }
-  };
-
-  /* -------------------- TIMER BUTTONS -------------------- */
-
-  const handleStart = () => {
-    setIsRunningStopwatch(true);
-    setIsEditingCountdown(false);
-    setLastInteracted("stopwatch");
-  };
-
-  const handleSetCountdown = () => {
-    // Toggling the editing mode on the Set button click
-    if (isEditingCountdown) {
-        // If already editing, treat it as confirmation (similar to 'Enter' logic)
-        const parsed = parseTime(countdownInput);
-        if (parsed !== null && parsed > 0) {
-            setCountdownSeconds(parsed);
-            setIsEditingCountdown(false);
-            setIsRunningCountdown(true);
-            setLastInteracted("countdown");
-        } else {
-            setIsEditingCountdown(false); // Cancel editing if invalid
-        }
-    } else {
-        // Start editing
-        setIsEditingCountdown(true);
-        setCountdownInput(formatTime(countdownSeconds || 0));
-        setLastInteracted("countdown");
-    }
-  };
-
-  const handlePause = () => {
-    if (isEditingCountdown) return; // Cannot pause while editing
-    if (lastInteracted === "stopwatch") {
-      setIsRunningStopwatch((p) => !p);
-    } else {
-      setIsRunningCountdown((p) => !p);
-    }
-  };
-
-  const handleStop = () => {
-    if (lastInteracted === "stopwatch") {
-      setIsRunningStopwatch(false);
-      setSeconds(0);
-    } else {
-      setIsRunningCountdown(false);
-      setCountdownSeconds(0);
-    }
-    setIsEditingCountdown(false);
-  };
-
-  /* ---------------- PRIMARY DISPLAY ---------------- */
-
-  const primaryDisplay = () => {
-    if (isEditingCountdown) return countdownInput;
-    if (lastInteracted === "stopwatch") return formatTime(seconds);
-    return formatTime(countdownSeconds);
   };
 
   /* -------------------- RENDER SECTION -------------------- */
@@ -415,7 +426,6 @@ const Studying = () => {
 
       <StickyBundle
         src={stickynote1}
-        alt="Sticky Note Bundle 1"
         top={58}
         left={140}
         handler={handleMouseDown}
@@ -423,7 +433,6 @@ const Studying = () => {
       />
       <StickyBundle
         src={stickynote2}
-        alt="Sticky Note Bundle 2"
         top={64}
         left={86}
         handler={handleMouseDown}
@@ -431,7 +440,6 @@ const Studying = () => {
       />
       <StickyBundle
         src={stickynote3}
-        alt="Sticky Note Bundle 3"
         top={64}
         left={190}
         handler={handleMouseDown}
@@ -439,7 +447,6 @@ const Studying = () => {
       />
       <StickyBundle
         src={stickynote4}
-        alt="Sticky Note Bundle 4"
         top={70}
         left={135}
         handler={handleMouseDown}
@@ -489,9 +496,8 @@ const Studying = () => {
             <input
               ref={countdownInputRef}
               value={countdownInput}
-              onChange={(e) => {
-                // Ignore direct text change in favour of onKeyDown logic
-              }}
+              // onChange is intentionally passive to allow onKeyDown to control input
+              onChange={(e) => { /* Only keep value synchronized for display */ }}
               onKeyDown={handleCountdownInputKeyDown}
               style={{
                 width: "100%",
@@ -514,7 +520,7 @@ const Studying = () => {
           )}
         </div>
 
-        {/* BUTTON HITZONES — you adjust manually */}
+        {/* BUTTON HITZONES */}
         <button
           onClick={handleStart}
           style={{
@@ -585,6 +591,31 @@ const Studying = () => {
             zIndex: 5000,
           }}
         />
+      )}
+      
+      {/* Trash Bin indicator (Taken from Code 2) */}
+      {isOverTrashBin && (
+        <div
+          style={{
+            position: "fixed",
+            left: TRASH_BIN_DIMENSIONS.left,
+            bottom: TRASH_BIN_DIMENSIONS.bottom,
+            width: TRASH_BIN_DIMENSIONS.width,
+            height: TRASH_BIN_DIMENSIONS.height,
+            backgroundColor: 'rgba(255, 0, 0, 0.5)',
+            borderRadius: '10px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: '20px',
+            fontWeight: 'bold',
+          }}
+        >
+          DROP TO DELETE
+        </div>
       )}
 
       {/* RENDER STICKY NOTES */}
@@ -657,10 +688,10 @@ const Studying = () => {
 
 /* ---------------- Sticky Note Bundle ---------------- */
 
-const StickyBundle = ({ src, alt, top, left, handler, id }) => (
+const StickyBundle = ({ src, top, left, handler, id }) => (
   <img
     src={src}
-    alt={alt}
+    alt={`Sticky Note Bundle ${id}`}
     onMouseDown={(e) => handler(id, e)}
     style={{
       position: "absolute",
@@ -757,6 +788,7 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
     });
   }, [drawings]);
 
+  // Function to get relative coordinates (0 to 1)
   const getCoords = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return {
@@ -778,8 +810,9 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
 
     setDrawings((prev) => {
       const updated = [...prev];
+      // Check if there's an active drawing to append to
       if (updated.length > 0) {
-        updated[updated.length - 1].points.push({ x, y });
+          updated[updated.length - 1].points.push({ x, y });
       }
       return updated;
     });
@@ -838,13 +871,13 @@ const StickyNoteEditor = ({ note, onSave, onClose }) => {
             borderRadius: 5,
           }}
         >
-          <button onClick={() => setTool("pen")} style={{ background: tool === "pen" ? '#ccc' : 'white' }}>✏️ Pen</button>
+          <button onClick={() => setTool("pen")} style={{ background: tool === "pen" ? '#ccc' : 'white' }}>✏ Pen</button>
           <button onClick={() => setTool("text")} style={{ background: tool === "text" ? '#ccc' : 'white' }}>📝 Text</button>
           <button
             onClick={clearCanvas}
             style={{ color: "white", background: "red" }}
           >
-            🗑️ Clear
+            🗑 Clear
           </button>
         </div>
 
