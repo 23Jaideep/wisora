@@ -3,7 +3,7 @@ import WelcomePage from './components/welcomePage.jsx';
 import Home from './components/home.jsx';
 import Studying from './components/Studying.jsx';
 import BookSection from './components/BookSection.jsx'; 
-import CoinHUD from './components/coinHUD.jsx';
+import CoinHUD from './components/CoinHUD.jsx';
 function App() {
   return (
     <>
