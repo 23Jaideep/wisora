@@ -7,6 +7,10 @@ import stickynote1 from "../assets/stickynote1.png";
 import stickynote2 from "../assets/stickynote2.png";
 import stickynote3 from "../assets/stickynote3.png";
 import stickynote4 from "../assets/stickynote4.png";
+import yellowstickynote from "../assets/yellowstickynote.png";
+import bluestickynote from "../assets/bluestickynote.png";
+import pinkstickynote from "../assets/pinkstickynote.png";
+import greenstickynote from "../assets/greenstickynote.png";
 import digitalClock from "../assets/digitalClock.png";
 
 import { useCoins } from "../context/coinContext";
@@ -22,6 +26,7 @@ const CONTENT_AREA = {
   PREVIEW_LEFT_OFFSET: 18,
   PREVIEW_TOP_OFFSET: 18,
   PREVIEW_WIDTH: 84,
+  PREVIEW_HEIGHT: 84,
 };
 
 const TRASH_BIN_DIMENSIONS = {
@@ -33,12 +38,23 @@ const TRASH_BIN_DIMENSIONS = {
 
 const COIN_INTERVAL = 60;
 
+const noteMap = {
+  stickynote1,
+  stickynote2,
+  stickynote3,
+  stickynote4,
+  yellowstickynote,
+  bluestickynote,
+  pinkstickynote,
+  greenstickynote,
+};
+
 /* ================= MAIN COMPONENT ================= */
 
 const Studying = () => {
   const { coins, setCoins } = useCoins();
 
-  /* --------- COIN / STUDY TIME --------- */
+  /* -------- COIN / STUDY TIME -------- */
 
   const [totalStudySeconds, setTotalStudySeconds] = useState(() => {
     return Number(localStorage.getItem("wisora_totalStudySeconds")) || 0;
@@ -48,20 +64,21 @@ const Studying = () => {
     return Number(localStorage.getItem("wisora_rewardedSeconds")) || 0;
   });
 
-  /* --------- TIMER SYSTEM --------- */
+  /* -------- TIMER SYSTEM (SINGLE SOURCE OF TRUTH) -------- */
 
   const [seconds, setSeconds] = useState(0);
   const [countdownSeconds, setCountdownSeconds] = useState(0);
 
   const [isRunningStopwatch, setIsRunningStopwatch] = useState(false);
   const [isRunningCountdown, setIsRunningCountdown] = useState(false);
+
   const [lastInteracted, setLastInteracted] = useState("stopwatch");
 
   const [isEditingCountdown, setIsEditingCountdown] = useState(false);
   const [countdownInput, setCountdownInput] = useState("00:00:00");
   const countdownInputRef = useRef(null);
 
-  /* --------- STICKY NOTES --------- */
+  /* -------- STICKY NOTES -------- */
 
   const [stickyNotes, setStickyNotes] = useState(() => {
     try {
@@ -80,7 +97,7 @@ const Studying = () => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isOverTrashBin, setIsOverTrashBin] = useState(false);
 
-  /* --------- REFS --------- */
+  /* -------- REFS -------- */
 
   const studyingRef = useRef(null);
   const audioRef = useRef(new Audio(clickSound));
@@ -94,19 +111,20 @@ const Studying = () => {
   useEffect(() => {
     localStorage.setItem("wisora_totalStudySeconds", totalStudySeconds);
     localStorage.setItem("wisora_rewardedSeconds", rewardedSeconds);
-  }, [totalStudySeconds, rewardedSeconds]);
+    localStorage.setItem("wisora_coins", coins);
+  }, [totalStudySeconds, rewardedSeconds, coins]);
 
-  /* Stopwatch */
+  /* Stopwatch loop */
   useEffect(() => {
     if (!isRunningStopwatch) return;
     const id = setInterval(() => {
       setSeconds((s) => s + 1);
-      setTotalStudySeconds((p) => p + 1);
+      setTotalStudySeconds((t) => t + 1);
     }, 1000);
     return () => clearInterval(id);
   }, [isRunningStopwatch]);
 
-  /* Countdown */
+  /* Countdown loop */
   useEffect(() => {
     if (!isRunningCountdown) return;
     const id = setInterval(() => {
@@ -122,13 +140,19 @@ const Studying = () => {
     return () => clearInterval(id);
   }, [isRunningCountdown]);
 
-  /* Coins */
+  /* Coin reward */
   useEffect(() => {
     if (totalStudySeconds - rewardedSeconds >= COIN_INTERVAL) {
       setCoins((c) => c + 1);
       setRewardedSeconds((r) => r + COIN_INTERVAL);
     }
   }, [totalStudySeconds]);
+
+  useEffect(() => {
+    if (isEditingCountdown && countdownInputRef.current) {
+      countdownInputRef.current.focus();
+    }
+  }, [isEditingCountdown]);
 
   /* ================= HELPERS ================= */
 
@@ -137,12 +161,6 @@ const Studying = () => {
     const m = Math.floor((t % 3600) / 60);
     const s = t % 60;
     return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
-  };
-
-  const parseTime = (str) => {
-    const p = str.split(":").map(Number);
-    if (p.length !== 3 || p.some(isNaN) || p[1] > 59 || p[2] > 59) return null;
-    return p[0] * 3600 + p[1] * 60 + p[2];
   };
 
   const getTrashRect = () => ({
@@ -191,38 +209,97 @@ const Studying = () => {
       : formatTime(countdownSeconds);
   };
 
+  /* ================= DRAG LOGIC ================= */
+
+  const handleMouseDown = (noteKey, e, index = null) => {
+    e.preventDefault();
+    try {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+    } catch {}
+
+    if (index !== null) {
+      setDraggedNoteIndex(index);
+      setDraggedNote(stickyNotes[index].src);
+      setIsDraggingExistingNote(true);
+    } else {
+      setDraggedNote(noteMap[noteKey]);
+      setDraggedNoteIndex(null);
+      setIsDraggingExistingNote(false);
+    }
+    setMousePos({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!draggedNote) return;
+    setMousePos({ x: e.clientX, y: e.clientY });
+
+    if (isDraggingExistingNote) {
+      const r = getTrashRect();
+      setIsOverTrashBin(
+        e.clientX > r.x &&
+          e.clientX < r.x + r.width &&
+          e.clientY > r.y &&
+          e.clientY < r.y + r.height
+      );
+    }
+  };
+
+  const handleMouseUp = (e) => {
+    if (!draggedNote) return;
+
+    const rect = studyingRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const r = getTrashRect();
+    const droppedOverTrash =
+      e.clientX > r.x &&
+      e.clientX < r.x + r.width &&
+      e.clientY > r.y &&
+      e.clientY < r.y + r.height;
+
+    if (isDraggingExistingNote && droppedOverTrash) {
+      setStickyNotes((p) => p.filter((_, i) => i !== draggedNoteIndex));
+    } else if (isDraggingExistingNote) {
+      setStickyNotes((p) =>
+        p.map((n, i) => (i === draggedNoteIndex ? { ...n, x, y } : n))
+      );
+    } else {
+      setStickyNotes((p) => [...p, { src: draggedNote, x, y, text: "", drawings: [] }]);
+    }
+
+    setDraggedNote(null);
+    setDraggedNoteIndex(null);
+    setIsDraggingExistingNote(false);
+    setIsOverTrashBin(false);
+  };
+
   /* ================= RENDER ================= */
 
   return (
     <div
       ref={studyingRef}
-      onMouseMove={(e) => draggedNote && setMousePos({ x: e.clientX, y: e.clientY })}
-      onMouseUp={() => {
-        setDraggedNote(null);
-        setIsDraggingExistingNote(false);
-        setIsOverTrashBin(false);
-      }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       style={{
+        backgroundColor: "#a97c70",
         height: "100vh",
         width: "100vw",
-        background: "#a97c70",
         position: "relative",
         overflow: "hidden",
       }}
     >
       <img src={table} style={{ position: "absolute", top: "57%", width: 1270 }} />
 
-      {/* CLOCK */}
       <div style={{ position: "absolute", top: "55%", left: "70%" }}>
         <img src={digitalClock} width={220} />
-        <div style={{ color: "#00ff66", fontSize: 30 }}>
-          {primaryDisplay()}
-        </div>
+        <div style={{ color: "#00ff66", fontSize: 30 }}>{primaryDisplay()}</div>
 
-        <button onClick={handleStart}>Start</button>
-        <button onClick={handleSetCountdown}>Set</button>
-        <button onClick={handlePause}>Pause</button>
-        <button onClick={handleStop}>Stop</button>
+        <button onClick={handleStart} />
+        <button onClick={handleSetCountdown} />
+        <button onClick={handlePause} />
+        <button onClick={handleStop} />
       </div>
 
       {draggedNote && (
@@ -233,7 +310,6 @@ const Studying = () => {
             left: mousePos.x - 45,
             top: mousePos.y - 45,
             width: 90,
-            opacity: 0.8,
             pointerEvents: "none",
           }}
         />
